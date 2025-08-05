@@ -81,5 +81,4 @@ UNSURE IF I WILL SUPPORT THIS, BUT I DO WANT TO DO ROLE AND CHANNEL FUNCTIONALIT
   **Get a helpful, clear, less sassy answer.**
 
 - `!askredserious <prompt>`  
-  **Get an analytical,scholar like answer(cuts a lot of personality and tries to prompt from the perspective of a professor)
-  S**
+  **Get an analytical,scholar like answer(cuts a lot of personality and tries to prompt from the perspective of a professor)**
