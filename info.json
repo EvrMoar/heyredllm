@@ -1,0 +1,10 @@
+{
+  "author": ["EvrMoar"],
+  "description": "Enables Red to use a local LLM for chat. Responds to replies, mentions, or commands. Includes multiple commands for different personalities; use [p]heyred for witty/edgy banter, [p]askred for helpful answers, or [p]askredserious for scholar like analysis.",
+  "install_msg": "heyredllm installed! Use [p]heyred, @Red, or reply to Red’s messages for full personality. Try [p]askred for more direct help, or [p]askredserious for scholarly, analytical answers.",
+  "name": "heyredllm",
+  "short": "Turn Red Into an AI",
+  "requirements": [],
+  "tags": ["llm", "chat", "personality", "ai", "koboldcpp", "kobold", "gguf"],
+  "type": "COG",
+}
