@@ -16,6 +16,7 @@ UNSURE IF I WILL SUPPORT THIS, BUT I DO WANT TO DO ROLE AND CHANNEL FUNCTIONALIT
 
 - **Local LLM Integration**: Connects your Discord bot to a local large language model running via KoboldCpp.
 - **Three Personalities**:
+(I used a LLM to generate the personalities because I tested 10+ LLM models and wanted to try a variety of personalities quickly. They are all temp for now.)
   - **Red Personality**: Playful, witty, meme responses.(personality is a little rough, I need to fix)
   - **Helpful Mode**: Clear, direct, user-friendly answers.
   - **Serious/Scholar Mode**: Analytical, professional, and thorough answers.
