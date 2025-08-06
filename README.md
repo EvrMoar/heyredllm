@@ -1,6 +1,8 @@
 # heyredllm
 
-A [Redbot](https://github.com/Cog-Creators/Red-DiscordBot) cog that adds a local LLM (Language Model) brain to your Discord bot using [KoboldCpp](https://github.com/LostRuins/koboldcpp) as the backend.
+A [Redbot](https://github.com/Cog-Creators/Red-DiscordBot) cog that adds a local LLM brain to your Discord bot using [KoboldCpp](https://github.com/LostRuins/koboldcpp) as the backend.
+
+My discord wanted functionality to listen to music, or basic commands, and I wasn't happy with Red bot feeling so "stiff". This is my attempt to liven up the bot, and it was a great opportunity to learn about LLM's. Eventually I would love to integrate this into Red bot, or write my own discord bot, but for now this was more of a "for fun". Eventually I will add a database type memory system to see if I can keep track of various information or feed it certain things to be able to answer questions more tailored to the users or areas that I want it to focus on.
 
 Redbot + LLM = Turns Red into a AI and tries to give the bot some personality.
 
@@ -16,6 +18,7 @@ UNSURE IF I WILL SUPPORT THIS, BUT I DO WANT TO DO ROLE AND CHANNEL FUNCTIONALIT
 
 - **Local LLM Integration**: Connects your Discord bot to a local large language model running via KoboldCpp.
 - **Three Personalities**:
+(I used a LLM to generate the personalities because I tested 10+ LLM models and wanted to try a variety of personalities quickly. They are all temp for now.)
   - **Red Personality**: Playful, witty, meme responses.(personality is a little rough, I need to fix)
   - **Helpful Mode**: Clear, direct, user-friendly answers.
   - **Serious/Scholar Mode**: Analytical, professional, and thorough answers.
@@ -78,4 +81,4 @@ UNSURE IF I WILL SUPPORT THIS, BUT I DO WANT TO DO ROLE AND CHANNEL FUNCTIONALIT
   **Get a helpful, clear, less sassy answer.**
 
 - `!askredserious <prompt>`  
-  **Get an analytical, prof**
+  **Get an analytical,scholar like answer(cuts a lot of personality and tries to prompt from the perspective of a professor)**
