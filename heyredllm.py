@@ -4,18 +4,17 @@ from redbot.core import commands, checks
 from collections import OrderedDict
 import os
 import json
+import time
+import random
 
 # Hello, I used a lot of comments because this project was to learn Red Bot and Cogs for the bot, as well as LLM's
 # I also wanted to have a lot of comments incase someone wants to take this further, because this is a fun project for my discord and learnings.
 
-# FIXME: Red isn't chirping to random messages
-# FIXME: Red isn't answering when you Reply to their messages
-# FIXME: Red isn't properly ending cut-offs and finishing in the next message(happens when running out of tokens)
+# FIXME: Red isn't properly ending cut-off, it deletes the whole message instead of adding the warning at the end.
 
 # Immediate
 # TODO: Improve installer text/prompts.(how are people doing those menus???)
 # TODO: Create functionality "only these roles can interact with red" and command to set those roles.
-# TODO: Create functionality "Red LLM can only talk or listen in these text channels"
 # TODO: Put chirp settings in config
 # TODO: Make commands to change various settings
 # TODO: Make a command that can prompt the user questions to build a peresonality for the Red LLM
@@ -85,7 +84,7 @@ class HeyRedLLM(commands.Cog):
         self.cache_size = 300
 
         #Random Engagement Settings; Red will randomly respond to users in chat unmprompted, to feel more "lively"
-        self.last_chirp = 0
+        self.last_chirp = time.time()
         self.base_chirp_chance = 0.0003  # 0.03%
         self.chirp_chance = self.base_chirp_chance
         self.chirp_cooldown = 10 * 60  # 10 minutes in seconds
@@ -93,6 +92,10 @@ class HeyRedLLM(commands.Cog):
         self.chirp_period = 3 * 60 * 60  # 3 hours in seconds
         self.max_chirp_chance = 0.12    # 12%
 
+        #Channels RedLLM is allowed to respond in
+        self.allowed_channel_ids = set(self._config.get("allowed_channel_ids", []))
+        self.allow_dm = self._config.get("allow_dm", True)
+        
     #This makes the function a [p] command for red.
     #Example: !heyredllmsetup, if run on red would run this function and set up the cog
     @commands.command()
@@ -108,7 +111,7 @@ class HeyRedLLM(commands.Cog):
 
         # API URL
         await ctx.send("Enter the LLM API URL\n\n(current: `{}`):".format(self.api_url or "not set"))
-        msg = await ctx.bot.wait_for("message", check=check)
+        msg = await ctx.bot.wait_for("message", check=check, timeout=120)
         if msg.content.lower() == "cancel":
             await ctx.send("Setup cancelled.")
             return
@@ -116,7 +119,7 @@ class HeyRedLLM(commands.Cog):
 
         # Model Name
         await ctx.send("Enter the LLM model and folder name that KoboldCPP uses.\n\nExample: koboldcpp/KobbleTiny-Q4_K.gguf\n\n(current: `{}`):".format(self.model or "not set"))
-        msg = await ctx.bot.wait_for("message", check=check)
+        msg = await ctx.bot.wait_for("message", check=check, timeout=120)
         if msg.content.lower() == "cancel":
             await ctx.send("Setup cancelled.")
             return
@@ -131,6 +134,77 @@ class HeyRedLLM(commands.Cog):
 
     def is_llm_configured(self):
         return bool(self.api_url and self.model)
+
+    @commands.command()
+    @commands.guild_only()
+    @checks.admin_or_permissions(manage_guild=True)
+    async def heyredallowhere(self, ctx: commands.Context):
+        """Allow Red to respond in this channel."""
+        self.allowed_channel_ids.add(ctx.channel.id)
+        self._save_allow_config()
+        await ctx.send(f"✅ Red will now respond in {ctx.channel.mention}.")
+
+    @commands.command()
+    @commands.guild_only()
+    @checks.admin_or_permissions(manage_guild=True)
+    async def heyreddenyhere(self, ctx: commands.Context):
+        """Remove this channel from the allow list."""
+        self.allowed_channel_ids.discard(ctx.channel.id)
+        self._save_allow_config()
+        await ctx.send(f"🚫 Red will no longer respond in {ctx.channel.mention}.")
+
+    @commands.command()
+    async def heyredallowed(self, ctx: commands.Context):
+        """Show allowed channels (empty = allowed everywhere)."""
+        if not self.allowed_channel_ids:
+            await ctx.send("No allow list set — Red will respond everywhere by default.")
+            return
+        # Only mention channels that exist in this server
+        mentions = []
+        if ctx.guild:
+            for cid in sorted(self.allowed_channel_ids):
+                ch = ctx.guild.get_channel(cid)
+                if ch:
+                    mentions.append(ch.mention)
+        text = ", ".join(mentions) if mentions else "(none from this server)"
+        await ctx.send(f"Allowed channels: {text}")
+
+    @commands.command()
+    @checks.is_owner()
+    async def heyreddms(self, ctx: commands.Context, toggle: str):
+        """Enable/disable DM responses globally: on/off."""
+        val = toggle.lower()
+        if val not in ("on","off","true","false","yes","no"):
+            await ctx.send("Usage: `[p]heyreddms on|off`")
+            return
+
+        self.allow_dm = val in ("on","true","yes")
+        self._save_allow_config()
+        await ctx.send(f"DM responses {'enabled' if self.allow_dm else 'disabled'}.")
+
+    def _save_allow_config(self):
+        self._config["allowed_channel_ids"] = sorted(self.allowed_channel_ids)
+        self._config["allow_dm"] = self.allow_dm
+        save_config(self._config)
+
+    def _channel_is_allowed(self, obj):
+        """
+        Accepts a message, context, or channel.
+        Rule: if allowlist is empty -> allow everywhere (back-compat).
+        """
+        # Figure out channel + guild
+        channel = getattr(obj, "channel", obj)
+        guild = getattr(channel, "guild", getattr(obj, "guild", None))
+
+        # DMs have no guild
+        if guild is None:
+            return self.allow_dm if self.allowed_channel_ids else True
+
+        # If no allowlist yet, allow everywhere (so you don't lock yourself out)
+        if not self.allowed_channel_ids:
+            return True
+
+        return channel.id in self.allowed_channel_ids
 
     #Used to track what messages Red responded to using which personality
     #Helps continue personality used in chains of responses
@@ -163,7 +237,8 @@ class HeyRedLLM(commands.Cog):
         payload,
         ctx=None,
         message=None,
-        personality="sassy"
+        personality="sassy",
+        allow_followup=True
     ):
 
         #
@@ -188,7 +263,7 @@ class HeyRedLLM(commands.Cog):
 
                 data = await response.json()
                 reply = data.get("choices", [{}])[0].get("message", {}).get("content", "No response.")
-                reply = reply.replace(f"@{username}", f"<@{userid}>")
+                reply = re.sub(rf"@?{re.escape(username)}\b", f"<@{userid}>", reply, flags=re.IGNORECASE)
                 # Send reply
                 # This confused me, ctx and message are discord specific info for the specific message Red is responding to.
                 # ctx is short for context it's a command like !heyred
@@ -196,37 +271,54 @@ class HeyRedLLM(commands.Cog):
                 # It contains what channel, who sent the message, and essentially lets us know how to respond to the message.
                 if ctx:
                     sent_msg = await ctx.send(reply.strip(), reference=ctx.message)
-                    self.cache_personality(sent_msg.id, "sassy")
                 elif message:
                     sent_msg = await message.reply(reply.strip())
                     await self.bot.process_commands(message)
 
                 self.cache_personality(sent_msg.id, personality)
 
+                # one (and only one) follow-up if cut-off detected
+                if allow_followup and self.needs_followup(reply):
+                    follow_payload = {
+                        "model": self.model,
+                        "messages": payload["messages"] + [
+                            {"role": "system", "content": "Be brief. Only finish the previous answer."},
+                            {"role": "user", "content": self.prompt_followup}
+                        ],
+                        "max_tokens": min(128, self.max_tokens // 2),
+                        "temperature": self.temperature,
+                    }
+
+
+                    async with aiohttp.ClientSession() as session2:
+                        async with session2.post(self.api_url, json=follow_payload, headers={"Content-Type":"application/json"}) as resp2:
+                            if resp2.status == 200:
+                                data2 = await resp2.json()
+                                reply2 = data2.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                                reply2 = re.sub(rf"@?{re.escape(username)}\b", f"<@{userid}>", reply2, flags=re.IGNORECASE)
+                                if reply2:
+                                    if ctx:
+                                        sent2 = await ctx.send(reply2, reference=sent_msg)
+                                    else:
+                                        sent2 = await message.reply(reply2)
+                                    self.cache_personality(sent2.id, personality)
+
                 return reply.strip()
 
-    def build_prompt_payload(
-        self,
-        user_prompt,
-        system_prompt,
-        *,
-        max_tokens=None,
-        temperature=None,
-        assistant=None,
-    ):
+    def build_prompt_payload(self, user_prompt, system_prompt, *, max_tokens=None, temperature=None, assistant=None):
+        messages = [{"role": "system", "content": system_prompt}]
 
-        #builds the prompt payload to send to the LLM
-        payload = {
+        if assistant:
+            messages.append({"role": "assistant", "content": assistant})
+
+        messages.append({"role": "user", "content": user_prompt})
+
+        return {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
+            "messages": messages,
             "max_tokens": max_tokens if max_tokens is not None else self.max_tokens,
             "temperature": temperature if temperature is not None else self.temperature
         }
-
-        return payload
 
     #could be written better to add more personalities in the future
     def get_personality_prompt(self, personality, userid):
@@ -242,6 +334,10 @@ class HeyRedLLM(commands.Cog):
     @commands.command()
     async def heyred(self, ctx: commands.Context, *, prompt: str):
         
+        if not self._channel_is_allowed(ctx):
+            await ctx.send("This isn’t an approved channel for Red. An admin can run `[p]heyredallowhere` to enable it here.")
+            return
+
         if not self.is_llm_configured():
             await ctx.send("Red's LLM isn't set up yet! Please ask the bot owner to run `[p]heyredllmsetup` to finish configuration.")
             return
@@ -258,6 +354,10 @@ class HeyRedLLM(commands.Cog):
     #A command that lets you send a prompt trying to make Red a little more helpful, to answer questions better
     @commands.command()
     async def askred(self, ctx: commands.Context, *, prompt: str):
+
+        if not self._channel_is_allowed(ctx):
+            await ctx.send("This isn’t an approved channel for Red. An admin can run `[p]heyredallowhere` to enable it here.")
+            return
 
         if not self.is_llm_configured():
             await ctx.send("Red's LLM isn't set up yet! Please ask the bot owner to run `[p]heyredllmsetup` to finish configuration.")
@@ -309,11 +409,11 @@ class HeyRedLLM(commands.Cog):
         return False
 
     #Does the random response
-    async def red_chirp(self, username, userid, prompt, ctx, personality="sassy"):
+    async def red_chirp(self, username, userid, prompt, message, personality="sassy"):
         
-        system_prompt = self.get_personality_prompt(personality, userid) + self.prompt_chirp
+        system_prompt = f"{self.get_personality_prompt(personality, userid)}\n{self.prompt_chirp}"
         payload = self.build_prompt_payload(prompt, system_prompt)
-        reply = await self.send_red_prompt(username, userid, payload, ctx, None, personality)
+        reply = await self.send_red_prompt(username, userid, payload, ctx=None, message=message, personality=personality)
 
     @commands.Cog.listener()
     #Here be dragons, there are bugs here, my goal is to fix this next.
@@ -325,12 +425,15 @@ class HeyRedLLM(commands.Cog):
         if not self.is_llm_configured():
             return
 
-        # Check if this message is a command; if so, do nothing (avoid double reply)
+        #Check if this message is a command; if so, do nothing (avoid double reply)
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             return
 
-        # Only react to direct @mentions or replies to the bot
+        if not self._channel_is_allowed(message):
+            return
+
+        #Only react to direct @mentions or replies to the bot
         bot_id = self.bot.user.id
         mentioned = self.bot.user.mentioned_in(message)
         replied_to_bot = (
@@ -347,7 +450,7 @@ class HeyRedLLM(commands.Cog):
         if not (mentioned or replied_to_bot):
             # If not a mention or reply to Red, check to see if random engage, or just let commands process and do nothing
             if self.check_and_chirp() and prompt:
-                await self.red_chirp(username, userid, prompt, ctx)
+                await self.red_chirp(username, userid, prompt, message)
                 return
             else:
                 await self.bot.process_commands(message)
@@ -356,12 +459,10 @@ class HeyRedLLM(commands.Cog):
         if not prompt:
             prompt = self.prompt_failed
 
-        headers = {"Content-Type": "application/json"}
-
         #Get a personality, if replying to a chain of messages that a specific personality was used.
         if message.reference and message.reference.resolved:
             replied_message_id = message.reference.resolved.id
-            personality = self.personality_cache.get(message_id, "sassy")
+            personality = self.personality_cache.get(replied_message_id, "sassy")
         else:
             personality = "sassy"
 
@@ -373,8 +474,14 @@ class HeyRedLLM(commands.Cog):
         #LLM's expect conversation history like user->assistant->user->assistant
         #Asstant is the bots messages in this case, gives the LLM more info to respond properly
         #This may be super messed up, will investigate later
+        ref = None
         if message.reference:
             ref = getattr(message.reference, "resolved", None)
+            if not ref and message.reference and message.reference.message_id:
+                try:
+                    ref = await message.channel.fetch_message(message.reference.message_id)
+                except Exception:
+                    ref = None
             if ref and hasattr(ref, "author") and hasattr(ref, "content"):
                 if ref.author.id == bot_id:
                     messages.append({
@@ -393,12 +500,7 @@ class HeyRedLLM(commands.Cog):
 
         messages.append({"role": "user", "content": user_content})
 
-        # FIXME: Ew, I should have used the build payload prompt, I need to fix this.
-        payload = { 
-            "model": self.model,
-            "messages": messages,
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature
-        }
+        assistant_text = ref.content if (ref and ref.author.id == bot_id) else None
+        payload = self.build_prompt_payload(user_content, system_prompt, assistant=assistant_text)
 
-        reply = await self.send_red_prompt(username, userid, payload, ctx, message, personality)
+        reply = await self.send_red_prompt(username, userid, payload, ctx=ctx, message=message, personality=personality)
