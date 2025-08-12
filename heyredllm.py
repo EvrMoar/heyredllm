@@ -23,67 +23,67 @@ import random
 # TODO: Create a database to save notes or important conversations about users or the server, to recall them later.(Make red feel more "Real")
 # TODO: Make it so Red can join a voice channel, listen, and respond to users
 
-#First we need to prompt the user for the setup info needed to run the bot.
-#This will let the user put their KoboldCPP Host location, as well as theier model info
-#The LLM will not be able to run until the config is setup correctly
-#Location of Config Json
+# First we need to prompt the user for the setup info needed to run the bot.
+# This will let the user put their KoboldCPP Host location, as well as theier model info
+# The LLM will not be able to run until the config is setup correctly
+# Location of Config Json
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
-#Load the Config
-#Must have api_url and model set in the config to run
+# Load the Config
+# Must have api_url and model set in the config to run
 def load_config():
     if not os.path.exists(CONFIG_PATH):
         return {"api_url": "", "model": ""}
     with open(CONFIG_PATH) as f:
         return json.load(f)
 
-#Save the Config
+# Save the Config
 def save_config(data):
-    #with closes the file, because that's a thing in python(or you use f.close)
+    # with closes the file, because that's a thing in python(or you use f.close)
     # LEARN: go learn more about config file stuff. Also if there are better ways to handle talking between various file types. Lets do some tables later, we love expensive table lookups!
-    #"w" opens the file as writable, don't forget that.
+    # "w" opens the file as writable, don't forget that.
     with open(CONFIG_PATH, "w") as f:
-        #indent is telling python to print the JSON with 2 spaces of indentation, for easier readability.(thanks random reddit convo)
+        # indent is telling python to print the JSON with 2 spaces of indentation, for easier readability.(thanks random reddit convo)
         json.dump(data, f, indent=2)
 
-#Runs when the user installs and loads the cog(or on boot of red, if preivously installed+loaded)
+# Runs when the user installs and loads the cog(or on boot of red, if preivously installed+loaded)
 class HeyRedLLM(commands.Cog):
-    #main everything
+    # main everything
 
-    #Init our variables for use later
+    # Init our variables for use later
     # LEARN: If there is a better way to do this
     def __init__(self, bot):
-        #Standard info needed all over
+        # Standard info needed all over
         self.bot = bot
         self._config = load_config()
-        #Needed config settings in order to run
+        # Needed config settings in order to run
         self.api_url = self._config.get("api_url", "")
         self.model = self._config.get("model", "")
-        #How long the bot can respond, more tokens = more length. Each token is about 4 characters of text(including spaces+symbols)
-        #If messages are getting cut-off often, increase this potentially.
-        #More tokens = more processing time/power; reduce this to speed it up
-        #Anything over 400-500 is probably overkill for a discord bot.
+        # How long the bot can respond, more tokens = more length. Each token is about 4 characters of text(including spaces+symbols)
+        # If messages are getting cut-off often, increase this potentially.
+        # More tokens = more processing time/power; reduce this to speed it up
+        # Anything over 400-500 is probably overkill for a discord bot.
         self.max_tokens = self._config.get("max_tokens", 200)
-        #How "Creative" the LLM gets. The closer to 1 the more unique the answers get, but the more inaccuracies occur.
-        #0.6 - 0.8 is a good safezone for personality vs. accuracy.
+        # How "Creative" the LLM gets. The closer to 1 the more unique the answers get, but the more inaccuracies occur.
+        # 0.6 - 0.8 is a good safezone for personality vs. accuracy.
         self.temperature = self._config.get("temperature", 0.75)
-        #If for some reason the prompt gets lost or ingested wrong
+        # If for some reason the prompt gets lost or ingested wrong
         self.prompt_failed = self._config.get("prompt_failed", "User Prompt Failed, Tell Them Nicely.")
-        #Red ran out of tokens, so instead of the message being clipped off, Red will write a second message to "wrap up"
+        # Red ran out of tokens, so instead of the message being clipped off, Red will write a second message to "wrap up"
         self.prompt_followup = self._config.get("prompt_followup", "You are following up to a message you didn't finish.")
-        #A prompt that gets appended when Red randomly decides to "chime in"(responds randomly to conversations happening in discord)
+        # A prompt that gets appended when Red randomly decides to "chime in"(responds randomly to conversations happening in discord)
         self.prompt_chirp = "\n".join(self._config.get("prompt_chirp", ["You are Red, a Discord Bot, responding to a users message randomly." ]))
-        #The standard personality, that gets prompted when talking to Red.
+        # The standard personality, that gets prompted when talking to Red.
         self.personality_sassy = "\n".join(self._config.get("normal_personality_prompt", ["You are Red, a Discord Bot, answer in a sassy way." ]))
-        #The helpful personality, when you try to ask Red a question(reduces potential frustration if you are trying to genuinly ask a question)
+        # The helpful personality, when you try to ask Red a question(reduces potential frustration if you are trying to genuinly ask a question)
         self.personality_helpful = "\n".join(self._config.get("helpful_prompt", ["You are Red, a Discord Bot, answer in a helpful way."]))
-        #The "Smart" personality, when you want a answer with less personality and a more professional demanor
+        # The "Smart" personality, when you want a answer with less personality and a more professional demanor
         self.personality_scholar = "\n".join(self._config.get("scholar_prompt", ["You are Red, a Discord Bot, answer like a scholar."]))
-        #We cache what personality was used in which messages, so that Red knows what personality to maintain if a reply chain is going.(Wouldn't want a serious question reply chain to turn sassy)
+        # We cache what personality was used in which messages, so that Red knows what personality to maintain if a reply chain is going.(Wouldn't want a serious question reply chain to turn sassy)
         self.personality_cache = OrderedDict()
         self.cache_size = 300
 
-        #Random Engagement Settings; Red will randomly respond to users in chat unmprompted, to feel more "lively"
+        # Random Engagement Settings; Red will randomly respond to users in chat unmprompted, to feel more "lively"
         self.last_chirp = time.time()
         self.base_chirp_chance = 0.0003  # 0.03%
         self.chirp_chance = self.base_chirp_chance
@@ -92,21 +92,22 @@ class HeyRedLLM(commands.Cog):
         self.chirp_period = 3 * 60 * 60  # 3 hours in seconds
         self.max_chirp_chance = 0.12    # 12%
 
-        #Channels RedLLM is allowed to respond in
+        # Channels RedLLM is allowed to respond in
         self.allowed_channel_ids = set(self._config.get("allowed_channel_ids", []))
         self.allow_dm = self._config.get("allow_dm", True)
         
-    #This makes the function a [p] command for red.
-    #Example: !heyredllmsetup, if run on red would run this function and set up the cog
+    # This makes the function a [p] command for red.
+    # Example: !heyredllmsetup, if run on red would run this function and set up the cog
     @commands.command()
-    #Makes this function only able to run by the owner of Red
+    # Makes this function only able to run by the owner of Red
     @checks.is_owner()
-    #This command prompts the user for the API_URL and MODEL config settings and lets them set them in discord(without having to open the config.json)
+    # This command prompts the user for the API_URL and MODEL config settings and lets them set them in discord(without having to open the config.json)
     async def heyredllmsetup(self, ctx):
+        
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
-        #ctx.send is how we send messages to discord through Red
+        # ctx.send is how we send messages to discord through Red
         await ctx.send("Let's set up heyredllm!\n\nExample: http://123.45.6.789:5001/v1/chat/completions\n\nJust send messages like normal, whatever messages you send will be used for your settings so be careful!!!\n\n(Type 'cancel' at any time to stop.)")
 
         # API URL
@@ -139,7 +140,8 @@ class HeyRedLLM(commands.Cog):
     @commands.guild_only()
     @checks.admin_or_permissions(manage_guild=True)
     async def heyredallowhere(self, ctx: commands.Context):
-        """Allow Red to respond in this channel."""
+        
+        # Allow Red to respond in this channel
         self.allowed_channel_ids.add(ctx.channel.id)
         self._save_allow_config()
         await ctx.send(f"✅ Red will now respond in {ctx.channel.mention}.")
@@ -148,32 +150,40 @@ class HeyRedLLM(commands.Cog):
     @commands.guild_only()
     @checks.admin_or_permissions(manage_guild=True)
     async def heyreddenyhere(self, ctx: commands.Context):
-        """Remove this channel from the allow list."""
+        
+        # Remove this channel from the allow list
         self.allowed_channel_ids.discard(ctx.channel.id)
         self._save_allow_config()
         await ctx.send(f"🚫 Red will no longer respond in {ctx.channel.mention}.")
 
     @commands.command()
     async def heyredallowed(self, ctx: commands.Context):
-        """Show allowed channels (empty = allowed everywhere)."""
+        
+        # Show allowed channels (empty = allowed everywhere)
         if not self.allowed_channel_ids:
             await ctx.send("No allow list set — Red will respond everywhere by default.")
             return
+
         # Only mention channels that exist in this server
         mentions = []
+
         if ctx.guild:
             for cid in sorted(self.allowed_channel_ids):
                 ch = ctx.guild.get_channel(cid)
                 if ch:
                     mentions.append(ch.mention)
+
         text = ", ".join(mentions) if mentions else "(none from this server)"
+
         await ctx.send(f"Allowed channels: {text}")
 
     @commands.command()
     @checks.is_owner()
     async def heyreddms(self, ctx: commands.Context, toggle: str):
-        """Enable/disable DM responses globally: on/off."""
+        
+        # Enable/disable DM's
         val = toggle.lower()
+
         if val not in ("on","off","true","false","yes","no"):
             await ctx.send("Usage: `[p]heyreddms on|off`")
             return
@@ -188,10 +198,10 @@ class HeyRedLLM(commands.Cog):
         save_config(self._config)
 
     def _channel_is_allowed(self, obj):
-        """
-        Accepts a message, context, or channel.
-        Rule: if allowlist is empty -> allow everywhere (back-compat).
-        """
+        
+        # Accepts a message, context, or channel.
+        # Rule: if allowlist is empty -> allow everywhere (back-compat).
+        
         # Figure out channel + guild
         channel = getattr(obj, "channel", obj)
         guild = getattr(channel, "guild", getattr(obj, "guild", None))
@@ -206,16 +216,16 @@ class HeyRedLLM(commands.Cog):
 
         return channel.id in self.allowed_channel_ids
 
-    #Used to track what messages Red responded to using which personality
-    #Helps continue personality used in chains of responses
+    # Used to track what messages Red responded to using which personality
+    # Helps continue personality used in chains of responses
     def cache_personality(self, msg_id, personality):
         self.personality_cache[msg_id] = personality
         if len(self.personality_cache) > self.cache_size:
-            self.personality_cache.popitem(last=False)  # Remove oldest
+            self.personality_cache.popitem(last=False)  #Remove oldest
 
-    #Detect if Red needs to send a follow-up message.
-    #Looks for phrases set in the personality prompt rules like 'I've hit my word limit and will continue in a follow-up message.'
-    #Add key phrases or variations of the prompt/sentence you instructed Red to use in the Red rule's section    
+    # Detect if Red needs to send a follow-up message.
+    # Looks for phrases set in the personality prompt rules like 'I've hit my word limit and will continue in a follow-up message.'
+    # Add key phrases or variations of the prompt/sentence you instructed Red to use in the Red rule's section    
     def needs_followup(self, reply: str):
         triggers = [
             "my word limit",
@@ -227,9 +237,9 @@ class HeyRedLLM(commands.Cog):
         reply_lower = reply.lower()
         return any(trigger in reply_lower for trigger in triggers)
     
-    #This function sends a prompt to the LLM
-    #Will Return the LLM response
-    #Making this was a pain, remember this pain and do it right next time(because you'll be back, I think there is an on_message bug in here)
+    # This function sends a prompt to the LLM
+    # Will Return the LLM response
+    # Making this was a pain, remember this pain and do it right next time(because you'll be back, I think there is an on_message bug in here)
     async def send_red_prompt(
         self,
         username,
@@ -305,6 +315,7 @@ class HeyRedLLM(commands.Cog):
 
                 return reply.strip()
 
+    # formats the prompt how it needs to be, in order to properly be sent koboldcpp
     def build_prompt_payload(self, user_prompt, system_prompt, *, max_tokens=None, temperature=None, assistant=None):
         messages = [{"role": "system", "content": system_prompt}]
 
@@ -320,7 +331,7 @@ class HeyRedLLM(commands.Cog):
             "temperature": temperature if temperature is not None else self.temperature
         }
 
-    #could be written better to add more personalities in the future
+    # could be written better to add more personalities in the future
     def get_personality_prompt(self, personality, userid):
         if personality == "helpful":
             return self.personality_helpful.format(userid=userid, botid=self.bot.user.id, max_tokens=self.max_tokens)
@@ -330,7 +341,7 @@ class HeyRedLLM(commands.Cog):
             # Default to sassy
             return self.personality_sassy.format(userid=userid, botid=self.bot.user.id, max_tokens=self.max_tokens)
 
-    #The normal personality prompt
+    # The normal personality prompt
     @commands.command()
     async def heyred(self, ctx: commands.Context, *, prompt: str):
         
@@ -351,7 +362,7 @@ class HeyRedLLM(commands.Cog):
 
         reply = await self.send_red_prompt(username, userid, payload, ctx, None, personality)
 
-    #A command that lets you send a prompt trying to make Red a little more helpful, to answer questions better
+    # A command that lets you send a prompt trying to make Red a little more helpful, to answer questions better
     @commands.command()
     async def askred(self, ctx: commands.Context, *, prompt: str):
 
@@ -372,7 +383,7 @@ class HeyRedLLM(commands.Cog):
 
         reply = await self.send_red_prompt(username, userid, payload, ctx, None, personality)
 
-    #A Prompt command that turns Red into a "Scholar" to answer serious and informatively
+    # A Prompt command that turns Red into a "Scholar" to answer serious and informatively
     @commands.command()
     async def askredserious(self, ctx: commands.Context, *, prompt: str):
 
@@ -389,8 +400,8 @@ class HeyRedLLM(commands.Cog):
 
         reply = await self.send_red_prompt(username, userid, payload, ctx, None, personality)
 
-    #checks to see if Red can randomly respond to random users talking
-    #has a timer and a % chance, settings above
+    # checks to see if Red can randomly respond to random users talking
+    # has a timer and a % chance, settings above
     def check_and_chirp(self):
         now = time.time()
         can_chirp = (now - self.last_chirp) > self.chirp_cooldown
@@ -408,7 +419,7 @@ class HeyRedLLM(commands.Cog):
                 return True
         return False
 
-    #Does the random response
+    # Does the random response
     async def red_chirp(self, username, userid, prompt, message, personality="sassy"):
         
         system_prompt = f"{self.get_personality_prompt(personality, userid)}\n{self.prompt_chirp}"
@@ -416,7 +427,7 @@ class HeyRedLLM(commands.Cog):
         reply = await self.send_red_prompt(username, userid, payload, ctx=None, message=message, personality=personality)
 
     @commands.Cog.listener()
-    #Here be dragons, there are bugs here, my goal is to fix this next.
+    # watches messages and responds to replys, @'s, and random messages(chirp) on a random timer system.
     async def on_message(self, message):
         # Ignore messages from bots (including yourself)
         if message.author.bot:
@@ -425,7 +436,7 @@ class HeyRedLLM(commands.Cog):
         if not self.is_llm_configured():
             return
 
-        #Check if this message is a command; if so, do nothing (avoid double reply)
+        # Check if this message is a command; if so, do nothing (avoid double reply)
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             return
@@ -433,7 +444,7 @@ class HeyRedLLM(commands.Cog):
         if not self._channel_is_allowed(message):
             return
 
-        #Only react to direct @mentions or replies to the bot
+        # Only react to direct @mentions or replies to the bot
         bot_id = self.bot.user.id
         mentioned = self.bot.user.mentioned_in(message)
         replied_to_bot = (
@@ -459,7 +470,7 @@ class HeyRedLLM(commands.Cog):
         if not prompt:
             prompt = self.prompt_failed
 
-        #Get a personality, if replying to a chain of messages that a specific personality was used.
+        # Get a personality, if replying to a chain of messages that a specific personality was used.
         if message.reference and message.reference.resolved:
             replied_message_id = message.reference.resolved.id
             personality = self.personality_cache.get(replied_message_id, "sassy")
@@ -470,10 +481,10 @@ class HeyRedLLM(commands.Cog):
         messages = [{"role": "system", "content": system_prompt}]
         user_content = prompt
 
-        #assistant is letting the LLM know the chain of conversation.
-        #LLM's expect conversation history like user->assistant->user->assistant
-        #Asstant is the bots messages in this case, gives the LLM more info to respond properly
-        #This may be super messed up, will investigate later
+        # assistant is letting the LLM know the chain of conversation.
+        # LLM's expect conversation history like user->assistant->user->assistant
+        # Asstant is the bots messages in this case, gives the LLM more info to respond properly
+        # This may be super messed up, will investigate later
         ref = None
         if message.reference:
             ref = getattr(message.reference, "resolved", None)
