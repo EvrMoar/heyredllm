@@ -10,16 +10,15 @@ import random
 # Hello, I used a lot of comments because this project was to learn Red Bot and Cogs for the bot, as well as LLM's
 # I also wanted to have a lot of comments incase someone wants to take this further, because this is a fun project for my discord and learnings.
 
-# FIXME: Red isn't properly ending cut-off, it deletes the whole message instead of adding the warning at the end.
+# FIXME: Red isn't properly ending cut-off, it deletes the whole message instead of adding the warning at the end; I think it might have been the prompt I was sending, change dit up and will see if it's fixed.
 
-# Immediate
+# Might Hit Eventually
 # TODO: Improve installer text/prompts.(how are people doing those menus???)
 # TODO: Create functionality "only these roles can interact with red" and command to set those roles.
 # TODO: Put chirp settings in config
-# TODO: Make commands to change various settings
 # TODO: Make a command that can prompt the user questions to build a peresonality for the Red LLM
 
-# Longterm
+# Longterm Things To Explore
 # TODO: Create a database to save notes or important conversations about users or the server, to recall them later.(Make red feel more "Real")
 # TODO: Make it so Red can join a voice channel, listen, and respond to users
 
@@ -259,7 +258,7 @@ class HeyRedLLM(commands.Cog):
         headers = {"Content-Type": "application/json"}
 
         # This is a hornets nest, there are quiet a few things I'm not sure how they are doing it and need to learn more
-        # LEARN: I don't really do stuff with HTTP, I know this is sending my payload as a JSON to the LLM API, but I want to know more about all of this.
+        # LEARN: I know this is sending my payload as a JSON to the LLM API, but I want to know more about all of this.
         # Need to check out other ways to run an LLM besides KoboldCPP and compare
         async with aiohttp.ClientSession() as session:
             async with session.post(self.api_url, json=payload, headers=headers) as response:
@@ -292,10 +291,10 @@ class HeyRedLLM(commands.Cog):
                     follow_payload = {
                         "model": self.model,
                         "messages": payload["messages"] + [
-                            {"role": "system", "content": "Be brief. Only finish the previous answer."},
+                            {"role": "system", "content": "Looking at your previous message, the reply to this, wrap up what you were trying to say in under 6 lines."},
                             {"role": "user", "content": self.prompt_followup}
                         ],
-                        "max_tokens": min(128, self.max_tokens // 2),
+                        "max_tokens": self.max_tokens,
                         "temperature": self.temperature,
                     }
 
@@ -429,7 +428,7 @@ class HeyRedLLM(commands.Cog):
     @commands.Cog.listener()
     # watches messages and responds to replys, @'s, and random messages(chirp) on a random timer system.
     async def on_message(self, message):
-        # Ignore messages from bots (including yourself)
+        # Ignore messages from bots (including self)
         if message.author.bot:
             return
 
