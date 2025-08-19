@@ -8,21 +8,16 @@ Redbot + LLM = Turns Red into a AI and tries to give the bot some personality.
 
 You must run !heyredllmsetup first, or edit your config.json with your model and koboldcpp host location.
 
-WARNING: I AM USING THIS AS A CHANCE TO LEARN LLM'S AND THERE IS CURRENTLY A LACK OF SAFETIES/Q&A. I RECOMMEND NOT USING THIS IN DISCORDS WHERE YOU DON'T TRUST EVERYONE WHO WILL BE ENGAGING WITH THE BOT.
-
-UNSURE IF I WILL SUPPORT THIS, BUT I DO WANT TO DO ROLE AND CHANNEL FUNCTIONALITY; RIGHT NOW ANYONE ANYWHERE CAN SPAM THE BOT WHICH IS ONE OF THE WORST PROBLEMS AND WHY IT IS NOT GOOD IN A PUBLIC SERVER.
-
 ---
 
 ## Features
 
 - **Local LLM Integration**: Connects your Discord bot to a local large language model running via KoboldCpp.
 - **Three Personalities**:
-(I used a LLM to generate the personalities because I tested 10+ LLM models and wanted to try a variety of personalities quickly. They are all temp for now.)
-  - **Red Personality**: Playful, witty, meme responses.(personality is a little rough, I need to fix)
+  - **Red Personality**: Playful, witty, sassy.
   - **Helpful Mode**: Clear, direct, user-friendly answers.
   - **Serious/Scholar Mode**: Analytical, professional, and thorough answers.
-- **Flexible Triggers**: Responds to bot commands, @mentions, and replies to the bot in any server channel or DM.
+- **Flexible Triggers**: Responds to bot commands, @mentions, chimes into random messages on a timer, and replies to the bot in any server channel or DM.
 - **Customizable**: You can edit the prompt in `heyredllm.py` to change Red’s vibe and behavior.
 
 ---
